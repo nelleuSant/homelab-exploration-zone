@@ -1,0 +1,27 @@
+# Discos Virtuais e ISOs (NUNCA subir para o GitHub)
+*.qcow2
+*.img
+*.iso
+*.vmdk
+*.vdi
+*.ova
+*.ovf
+
+# Logs e Caches de Automação (Packer / Ansible)
+packer_cache/
+crash.log
+*.retry
+.ansible/
+
+# Arquivos de Senhas e Chaves (Segurança)
+.env
+*.pem
+*.key
+id_rsa
+id_rsa.pub
+secret.txt
+
+# Arquivos temporários do Sistema Operacional
+.DS_Store
+Thumbs.db
+*~
