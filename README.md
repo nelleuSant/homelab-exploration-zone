@@ -97,18 +97,18 @@ homelab-exploration-zone/
 
 ## 🚀 Roadmap de Implantação
 
-- [ ] Fase 1: Preparação do Hipervisor Proxmox VE
+- [X] Fase 1: Preparação do Hipervisor Proxmox VE
     - Instalação limpa do Proxmox VE no SSD de 230 GB.
     - Particionamento e montagem do HDD de 500 GB como storage secundário (Directory ou LVM-Thin).
     - Atualização dos repositórios para a versão no-subscription.
 
-- [ ] Fase 2: Infraestrutura de Rede Virtual
+- [x] Fase 2: Infraestrutura de Rede Virtual
 
     - Criação da bridge interna vmbr1 (sem portas físicas associadas).
     - Criação da bridge interna vmbr2 (sem portas físicas associadas).
     - Validação da retenção do tráfego interno no switch virtual do kernel.
 
-- [ ] Fase 3: Implantação do Firewall (pfSense)
+- [x] Fase 3: Implantação do Firewall (pfSense)
 
     - Criação da VM do pfSense com 3 interfaces virtuais (vmbr0, vmbr1, vmbr2).
     - Configuração das faixas de IP: WAN via DHCP doméstico, OPT1 (10.0.10.1/24) e LAN (10.0.20.1/24).

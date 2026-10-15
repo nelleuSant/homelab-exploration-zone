@@ -24,4 +24,10 @@ secret.txt
 # Arquivos temporários do Sistema Operacional
 .DS_Store
 Thumbs.db
-*~
+
+# Terraform (Estado, Plugins e Variáveis Secretas)
+.terraform/
+.terraform.*
+*.tfstate
+*.tfstate.*
+*.tfvars
