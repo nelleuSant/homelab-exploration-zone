@@ -1,4 +1,6 @@
 terraform {
+  required_version = ">= 1.6.0, < 2.0.0"
+
   required_providers {
     proxmox = {
       source  = "bpg/proxmox"
@@ -8,9 +10,9 @@ terraform {
 }
 
 provider "proxmox" {
-  endpoint  = var.proxmox_endpoint 
+  endpoint  = var.proxmox_endpoint
   api_token = var.proxmox_api_token
-  insecure  = true
+  insecure  = var.proxmox_insecure
 }
 
 resource "proxmox_virtual_environment_vm" "pfsense_firewall" {
@@ -19,6 +21,8 @@ resource "proxmox_virtual_environment_vm" "pfsense_firewall" {
   vm_id     = 100 
 
   on_boot = true 
+
+  stop_on_destroy = true
 
   cpu {
     cores = 2
@@ -39,12 +43,11 @@ resource "proxmox_virtual_environment_vm" "pfsense_firewall" {
   # Leitor de CD/DVD Virtual
   cdrom {
     enabled   = true
-    # ATENÇÃO: Substitua pelo nome exato do arquivo .iso que você subiu!
-    file_id   = "HD-500GB:iso/netgate-installer-v1.2-RELEASE-amd64.iso"
+    file_id   = var.pfsense_iso_file_id
     interface = "ide2"
   }
 
-  boot_order = ["ide2", "scsi0"] # Boota primeiro no CD, depois no HD
+  boot_order = ["scsi0", "ide2"]
 
   # Placas de Rede Conectadas aos Switches Virtuais
   network_device {

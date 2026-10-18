@@ -1,0 +1,7 @@
+# Copie este arquivo para terraform.tfvars e preencha com suas credenciais reais.
+# NUNCA faça commit do arquivo terraform.tfvars com dados reais!
+
+proxmox_endpoint    = "https://192.168.1.100:8006/"
+proxmox_api_token   = "usuario@pam!nome-do-token=00000000-0000-0000-0000-000000000000"
+proxmox_insecure    = false
+pfsense_iso_file_id = "HD-500GB:iso/netgate-installer-v1.2-RELEASE-amd64.iso"
