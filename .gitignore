@@ -31,3 +31,7 @@ Thumbs.db
 *.tfstate
 *.tfstate.*
 *.tfvars
+
+# Ignorar Golden Config e arquivos sensíveis do pfSense
+pfsense-autodeploy/
+config.xml

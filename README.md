@@ -28,37 +28,38 @@ O isolamento do laboratório é estruturado em três bridges Linux independentes
 ```mermaid
 flowchart TD
     %% Infraestrutura Doméstica
-    Modem[Modem / Roteador Doméstico\n192.168.1.1]
-    PC[Computador de Uso Pessoal\nAcesso Web via Navegador]
+    Router["Roteador Doméstico\nRede Doméstica (WAN net)"]
+    CachyOS["CachyOS\nAcesso via Web GUI"]
 
-    subgraph "Servidor Proxmox All-in-One (i5-8400 | 16GB RAM)"
-        Proxmox[Proxmox VE Host\nGerenciamento: vmbr0]
-        FW["pfSense Firewall & Roteador\nWAN: vmbr0 | OPT1: vmbr1 | LAN: vmbr2"]
+    subgraph "Servidor Proxmox"
+        Proxmox["Proxmox VE\nGerenciamento: vmbr0 (:8006)"]
+        FW["pfSense Firewall (VM 100)\nWAN: vmbr0 (DHCP) | OPT1: vmbr1 (10.0.10.1/24) | LAN: vmbr2 (10.0.20.1/24)"]
         
         subgraph "Rede de Ataque (vmbr1)"
-            Kali[Kali Linux\nIP: 10.0.10.10/24]
+            Kali["Kali Linux\nIP: 10.0.10.10/24"]
         end
 
         subgraph "Zona de Exploração (vmbr2)"
-            Vuln1[Alvo Linux Metasploitable\nIP: 10.0.20.11/24]
-            Vuln2[Active Directory Windows Server\nIP: 10.0.20.12/24]
-            Vuln3[Docker Web Apps DVWA / Juice Shop\nIP: 10.0.20.13/24]
+            Vuln1["Metasploitable\nIP: 10.0.20.11/24"]
+            Vuln2["Active Directory\nIP: 10.0.20.12/24"]
+            Vuln3["Docker Web Apps\nIP: 10.0.20.13/24"]
         end
     end
 
-    %% Conexões Físicas
-    Modem <-->|Cabo Físico| Proxmox
-    Modem <-->|Cabo Físico / Wi-Fi| PC
-    PC -.->|Acesso HTTPS :8006| Proxmox
+    %% Conexões
+    Router <-->|"Cabo Físico (vmbr0)"| Proxmox
+    Router <-->|"Cabo Físico"| CachyOS
+    CachyOS -.->|"Gerenciamento HTTPS :8006"| Proxmox
+    CachyOS -.->|"Gerenciamento WebGUI HTTPS :443"| FW
     
-    %% Roteamento Interno das Bridges
-    Kali == "Tráfego Ofensivo\n10.0.10.0/24" ==> FW
-    FW == "Tráfego Roteado e Monitorado\n10.0.20.0/24" ==> Vuln1
-    FW == "Tráfego Roteado e Monitorado\n10.0.20.0/24" ==> Vuln2
-    FW == "Tráfego Roteado e Monitorado\n10.0.20.0/24" ==> Vuln3
+    %% Roteamento Interno do Proxmox
+    Kali == "Tráfego de Ataque\n10.0.10.0/24 (Bloqueado :22/:80/:443 no FW)" ==> FW
+    FW == "Tráfego Filtrado (OPT1 -> LAN)\n10.0.20.0/24" ==> Vuln1
+    FW == "Tráfego Filtrado (OPT1 -> LAN)\n10.0.20.0/24" ==> Vuln2
+    FW == "Tráfego Filtrado (OPT1 -> LAN)\n10.0.20.0/24" ==> Vuln3
 
-    %% Regra de Bloqueio para a LAN
-    FW -.-x|Bloqueio Estrito Drop All| Modem
+    %% Isolamento da Rede Doméstica
+    FW -.-x|"Bloqueio Estrito (Drop OPT1/LAN -> WAN net)"| Router
 
     %% Estilização
     classDef redeSegura fill:#2196F3,color:#fff,stroke:#fff,stroke-width:2px;
@@ -66,7 +67,7 @@ flowchart TD
     classDef redeAlvo fill:#4CAF50,color:#fff,stroke:#fff,stroke-width:2px;
     classDef fw fill:#FF9800,color:#fff,stroke:#fff,stroke-width:2px;
 
-    class Modem,PC,Proxmox redeSegura;
+    class Router,CachyOS,Proxmox redeSegura;
     class Kali redeAtaque;
     class Vuln1,Vuln2,Vuln3 redeAlvo;
     class FW fw;
@@ -74,55 +75,84 @@ flowchart TD
 
 ---
 
+## ⚙️ Provisionamento do Firewall (Terraform + Golden Config)
+
+A implantação do firewall pfSense combina **Infraestrutura como Código (Terraform)** para criação do hardware virtual no Proxmox e **restauração de backup (`config.xml`)** para aplicação das regras de segurança:
+
+1. **Configuração de Variáveis do Terraform:**
+   No diretório `infraestrutura/firewall/`, copie o arquivo de exemplo e preencha com os dados do seu servidor Proxmox:
+   ```bash
+   cp infraestrutura/firewall/terraform.tfvars.example infraestrutura/firewall/terraform.tfvars
+   chmod 600 infraestrutura/firewall/terraform.tfvars
+   ```
+   Defina no `terraform.tfvars` a URL da API (`proxmox_endpoint`), o token (`proxmox_api_token`) e o caminho da ISO de instalação no storage (`pfsense_iso_file_id`).
+
+2. **Criação da VM no Proxmox:**
+   ```bash
+   cd infraestrutura/firewall
+   terraform init
+   terraform apply
+   ```
+   O Terraform criará a VM `100` (`pfSense-Automated`) com disco de 20 GB no SSD (`local-lvm`), 3 interfaces de rede (`vmbr0`, `vmbr1`, `vmbr2`) e ordem de boot `["scsi0", "ide2"]` (que inicia automaticamente pelo CD-ROM na primeira execução, quando o disco `scsi0` ainda está vazio, e passa a iniciar pelo SSD após instalado).
+
+3. **Aplicação das Regras e Configurações (`config.xml`):**
+   Após concluir a instalação do pfSense no console do Proxmox:
+   * Acesse o **WebGUI do pfSense** a partir de um navegador na rede doméstica (`https://<IP-WAN-DO-PFSENSE>`).
+   * Navegue até **Diagnostics > Backup & Restore** (aba **Backup & Restore** > seção **Restore Backup**).
+   * Caso esteja replicando este laboratório a partir do template público [`config.xml.example`](infraestrutura/firewall/config.xml.example), você pode restaurar por seção (**Restore area**: *Interfaces*, *DHCP Server*, *Aliases* e *Firewall Rules*) para importar toda a topologia e regras sem sobrescrever a senha de administrador e o certificado SSL da sua instância.
+   * No ambiente local da autora, o arquivo completo `config.xml` (mantido fora do versionamento Git por conter hashes e chaves privadas) é restaurado integralmente em **Restore Configuration**.
+
+---
+
 ## 📁 Estrutura do Repositório
 
 ```
 homelab-exploration-zone/
-├── README.md               # Documentação principal e visão arquitetural
-├── docs/                   # Diagramas, matriz de endereçamento IP e fluxos de tráfego
-│   ├── topologia.md
-│   └── plano-enderecamento.md
+├── README.md                              # Documentação principal e visão arquitetural
+├── docs/                                  # Diagramas e topologia de rede
+│   └── topologia.md
 ├── infraestrutura/
-│   ├── proxmox/            # Configurações de rede (/etc/network/interfaces) e storages
-│   └── firewall/           # Regras de tráfego, aliases e backups do pfSense
+│   ├── proxmox/                           # Documentação da preparação do hipervisor e storages
+│   │   └── fase1-base-proxmox.md
+│   └── firewall/                          # Provisionamento IaC (Terraform) e regras do pfSense
+│       ├── main.tf                        # Definição da VM, discos e bridges (vmbr0, vmbr1, vmbr2)
+│       ├── variables.tf                   # Declaração de variáveis e parâmetros sensíveis
+│       ├── terraform.tfvars.example       # Modelo de preenchimento de variáveis do Terraform
+│       └── config.xml.example             # Template sanitizado das interfaces, DHCP, aliases e regras do pfSense
 ├── maquina-atacante/
-│   └── kali/               # Scripts de pós-instalação e listas de ferramentas
+│   └── kali-kvm/                          # Configurações e scripts da estação de ataque
 └── alvos-exploracao/
-    ├── active-directory/   # Procedimentos de deployment do AD e scripts BadBlood
-    ├── linux/              # Notas de configuração de alvos Linux clássicos
-    └── web-docker/         # Arquivos Docker Compose (DVWA, OWASP Juice Shop)
+    ├── active-directory/                  # Procedimentos de deployment do AD e scripts BadBlood
+    ├── linux/                             # Notas de configuração de alvos Linux clássicos
+    └── web-docker/                        # Arquivos Docker Compose (DVWA, OWASP Juice Shop)
 ```
 
 ---
 
 ## 🚀 Roadmap de Implantação
 
-- [X] Fase 1: Preparação do Hipervisor Proxmox VE
+- [x] Fase 1: Preparação do Hipervisor Proxmox VE
     - Instalação limpa do Proxmox VE no SSD de 230 GB.
-    - Particionamento e montagem do HDD de 500 GB como storage secundário (Directory ou LVM-Thin).
-    - Atualização dos repositórios para a versão no-subscription.
+    - Particionamento e montagem do HDD de 500 GB como storage secundário (`HD-500GB`).
+    - Atualização dos repositórios para a versão `no-subscription`.
 
 - [x] Fase 2: Infraestrutura de Rede Virtual
-
-    - Criação da bridge interna vmbr1 (sem portas físicas associadas).
-    - Criação da bridge interna vmbr2 (sem portas físicas associadas).
+    - Criação da bridge interna `vmbr1` (sem portas físicas associadas).
+    - Criação da bridge interna `vmbr2` (sem portas físicas associadas).
     - Validação da retenção do tráfego interno no switch virtual do kernel.
 
-- [x] Fase 3: Implantação do Firewall (pfSense)
-
-    - Criação da VM do pfSense com 3 interfaces virtuais (vmbr0, vmbr1, vmbr2).
-    - Configuração das faixas de IP: WAN via DHCP doméstico, OPT1 (10.0.10.1/24) e LAN (10.0.20.1/24).
-    - Aplicação de regras de firewall: permissão de tráfego de OPT1 para LAN, e bloqueio explícito de qualquer comunicação originada na vmbr1/vmbr2 em direção à rede doméstica (192.168.1.0/24).
+- [x] Fase 3: Implantação Automatizada e Blindagem do Firewall (pfSense)
+    - Provisionamento automatizado da VM do pfSense via **Terraform** (`bpg/proxmox`) com 3 interfaces virtuais (`vmbr0`, `vmbr1`, `vmbr2`).
+    - Configuração das faixas de IP e DHCP via restore do `config.xml`: WAN via DHCP doméstico, `OPT1` (`10.0.10.1/24`) e `LAN` (`10.0.20.1/24`).
+    - Blindagem de segurança: WebGUI em HTTPS restrito à `WAN net`, bloqueio de acesso administrativo (`22/80/443`) a partir das redes de laboratório, desativação de IPv6 e bloqueio explícito de qualquer comunicação originada na `vmbr1`/`vmbr2` em direção à rede doméstica (`WAN net`).
 
 - [ ] Fase 4: Provisionamento da Estação de Ataque
-
-    - Instalação do Kali Linux conectado à interface vmbr1 (armazenado no SSD).
-    - Configuração do gateway apontando para a interface do pfSense.
+    - Instalação do Kali Linux conectado à interface `vmbr1` (armazenado no SSD).
+    - Configuração do gateway apontando para a interface `OPT1` do pfSense (`10.0.10.1`).
 
 - [ ] Fase 5: Provisionamento dos Alvos de Estudo
-
-    - Instalação e deployment de alvos web em contêineres Docker via Alpine/Debian (vmbr2).
-    - Implantação de laboratório Active Directory enxuto com Windows Server Evaluation e BadBlood (vmbr2).
+    - Instalação e deployment de alvos web em contêineres Docker via Alpine/Debian (`vmbr2`).
+    - Implantação de laboratório Active Directory enxuto com Windows Server Evaluation e BadBlood (`vmbr2`).
     - Importação de máquinas legadas e desafios de exploração (Metasploitable, VulnHub).
 
 ## 📄 Licença e Aviso Legal
