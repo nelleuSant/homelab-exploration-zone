@@ -1,0 +1,7 @@
+# Copie este arquivo para terraform.tfvars e preencha com suas credenciais reais.
+# NUNCA faça commit do arquivo terraform.tfvars com dados reais!
+
+proxmox_endpoint  = "https://PROXMOX_HOST:8006/"
+proxmox_api_token = "<PROXMOX_API_TOKEN>"
+proxmox_insecure  = false
+kali_iso_file_id  = "HD-500GB:iso/kali-linux-installer-amd64.iso"
