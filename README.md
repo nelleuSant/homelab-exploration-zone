@@ -25,53 +25,17 @@ O isolamento do laboratório é estruturado em três bridges Linux independentes
 2. **`vmbr1` (Rede de Ataque - Não Atrelada a Portas Físicas):** Barramento virtual interno exclusivo para a máquina de ataque (Kali Linux) e a interface `OPT1` do pfSense.
 3. **`vmbr2` (Zona de Exploração - Não Atrelada a Portas Físicas):** Barramento virtual isolado que abriga os alvos de exploração (Linux, Windows Active Directory, Docker) e a interface `LAN` do pfSense.
 
-```mermaid
-flowchart TD
-    %% Infraestrutura Doméstica
-    Router["Roteador Doméstico\nRede Doméstica (WAN net)"]
-    CachyOS["CachyOS\nAcesso via Web GUI"]
+![Topologia de Rede](/docs/topologia.drawio.png)
 
-    subgraph "Servidor Proxmox"
-        Proxmox["Proxmox VE\nGerenciamento: vmbr0 (:8006)"]
-        FW["pfSense Firewall (VM 100)\nWAN: vmbr0 (DHCP) | OPT1: vmbr1 (10.0.10.1/24) | LAN: vmbr2 (10.0.20.1/24)"]
-        
-        subgraph "Rede de Ataque (vmbr1)"
-            Kali["Kali Linux\nIP: 10.0.10.10/24"]
-        end
+---
 
-        subgraph "Zona de Exploração (vmbr2)"
-            Vuln1["Metasploitable\nIP: 10.0.20.11/24"]
-            Vuln2["Active Directory\nIP: 10.0.20.12/24"]
-            Vuln3["Docker Web Apps\nIP: 10.0.20.13/24"]
-        end
-    end
+## ⚙️ Instalação do Proxmox
+O provisionamento do hypervisor no servidor foi feito instalando o Proxmox VE a partir de uma mídia USB inicializável, gerada através do software BalenaEtcher.
 
-    %% Conexões
-    Router <-->|"Cabo Físico (vmbr0)"| Proxmox
-    Router <-->|"Cabo Físico"| CachyOS
-    CachyOS -.->|"Gerenciamento HTTPS :8006"| Proxmox
-    CachyOS -.->|"Gerenciamento WebGUI HTTPS :443"| FW
-    
-    %% Roteamento Interno do Proxmox
-    Kali == "Tráfego de Ataque\n10.0.10.0/24 (Bloqueado :22/:80/:443 no FW)" ==> FW
-    FW == "Tráfego Filtrado (OPT1 -> LAN)\n10.0.20.0/24" ==> Vuln1
-    FW == "Tráfego Filtrado (OPT1 -> LAN)\n10.0.20.0/24" ==> Vuln2
-    FW == "Tráfego Filtrado (OPT1 -> LAN)\n10.0.20.0/24" ==> Vuln3
+- ISO Proxmox VE 9.2 ISO Installer: [Link](https://www.proxmox.com/en/downloads/proxmox-virtual-environment)
+- BalenaEtcher: [Link](https://etcher.balena.io/)
 
-    %% Isolamento da Rede Doméstica
-    FW -.-x|"Bloqueio Estrito (Drop OPT1/LAN -> WAN net)"| Router
-
-    %% Estilização
-    classDef redeSegura fill:#2196F3,color:#fff,stroke:#fff,stroke-width:2px;
-    classDef redeAtaque fill:#f44336,color:#fff,stroke:#fff,stroke-width:2px;
-    classDef redeAlvo fill:#4CAF50,color:#fff,stroke:#fff,stroke-width:2px;
-    classDef fw fill:#FF9800,color:#fff,stroke:#fff,stroke-width:2px;
-
-    class Router,CachyOS,Proxmox redeSegura;
-    class Kali redeAtaque;
-    class Vuln1,Vuln2,Vuln3 redeAlvo;
-    class FW fw;
-```
+Durante o setup, todas as opções default (recomendadas) foram mantidas para o particionamento e configuração inicial, não havendo customizações nesta etapa. Após a instalação, através da interface web (WebGUI), foram realizadas as configurações descritas no arquivo [`Configuracao-Proxmox-VE`](/infraestrutura/proxmox/Configuracao-Proxmox-VE.md).
 
 ---
 
@@ -146,7 +110,7 @@ homelab-exploration-zone/
     - Configuração das faixas de IP e DHCP via restore do `config.xml`: WAN via DHCP doméstico, `OPT1` (`10.0.10.1/24`) e `LAN` (`10.0.20.1/24`).
     - Blindagem de segurança: WebGUI em HTTPS restrito à `WAN net`, bloqueio de acesso administrativo (`22/80/443`) a partir das redes de laboratório, desativação de IPv6 e bloqueio explícito de qualquer comunicação originada na `vmbr1`/`vmbr2` em direção à rede doméstica (`WAN net`).
 
-- [ ] Fase 4: Provisionamento da Estação de Ataque
+- [X] Fase 4: Provisionamento da Estação de Ataque
     - Instalação do Kali Linux conectado à interface `vmbr1` (armazenado no SSD).
     - Configuração do gateway apontando para a interface `OPT1` do pfSense (`10.0.10.1`).
 
